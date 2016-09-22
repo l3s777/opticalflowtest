@@ -19,8 +19,9 @@ using namespace std;
 static void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double, const Scalar& color) {
     for(int y = 0; y < cflowmap.rows; y += step) {
         for(int x = 0; x < cflowmap.cols; x += step) {
-            const Point2f& fxy = flow.at<Point2f>(y, x)*10;
-            line(cflowmap, Point(x,y), Point(cvRound(x+fxy.x), cvRound(y+fxy.y)), color);
+            const Point2f& fxy = flow.at<Point2f>(y, x);
+	    // next Line is KEY !
+            line(cflowmap, Point(x,y), Point(cvRound(x+fxy.x), cvRound(y+fxy.y)), Scalar(255,255,0));
             circle(cflowmap, Point(x,y), 2, color, -1);
         }
     }
@@ -41,7 +42,6 @@ static void drawHsvMap(const Mat& flow, Mat& sflowmap) {
 	double mag_max;
 	minMaxLoc(magnitude, 0, &mag_max);
 	magnitude.convertTo(magnitude, -1, 1.0/mag_max);
-	//cout << "mag: " << magnitude << endl;
 
 	//build hsv image
 	Mat _hsv[3], hsv;
@@ -55,7 +55,6 @@ static void drawHsvMap(const Mat& flow, Mat& sflowmap) {
 	//convert to BGR and show
 	Mat bgr;//CV_32FC3 matrix
 	cvtColor(hsv, bgr, COLOR_HSV2BGR);
-	//imshow("flow", bgr);
 	bgr.copyTo(sflowmap);
 }
 
@@ -67,7 +66,7 @@ try {
 	rs::log_to_console(rs::log_severity::warn);
 	std::cout << "Starting..." << std::endl;
 
-	// realsense context
+	// realsense contextremap
 	rs::context ctx;
         cout << "There are " << ctx.get_device_count() << " connected RealSense devices." << endl << endl;
 
@@ -119,10 +118,12 @@ try {
 		if (!prevgray.empty()) {
 			// applying FlowFareback
 			calcOpticalFlowFarneback(prevgray, gray, flowUmat, 0.5, 3, 15, 3, 5, 1.2, 0);
+
 			// sflow to gray
 			cvtColor(prevgray, sflow, COLOR_GRAY2BGR);
 			// shsv to gray TODO check initial value in SHSV
 			cvtColor(prevgray, shsv, COLOR_GRAY2BGR);
+
     			// copy Umat container to standard Mat
     			flowUmat.copyTo(flow);
 
@@ -131,6 +132,19 @@ try {
 
 			drawHsvMap(flow, shsv);
 			imshow("hsv", shsv);
+
+			// TODO work with sflow --> blob motion vectors
+
+
+			// testing kmeans
+			// Mat labels, centers(2, 1, flow.type());
+			// double kmeans(InputArray data, int K, InputOutputArray bestLabels, TermCriteria criteria, int attempts, int flags, OutputArray centers=noArray() )
+			//kmeans(flow, 5, labels, TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 10, 1.0), 3, KMEANS_PP_CENTERS, centers);
+
+			//  cv::kmeans(samples, ...
+			//  updateMotionHistory(silh, mhi, timestamp, MHI_DURATION);
+			//  calcMotionGradient(mhi, mask, orient, MAX_TIME_DELTA, MIN_TIME_DELTA, 3);
+			//  segmentMotion(mhi, segmask, regions, timestamp, MAX_TIME_DELTA);
 
 
 		} else {
