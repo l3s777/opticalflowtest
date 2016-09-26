@@ -14,15 +14,33 @@
 using namespace cv;
 using namespace std;
 
+/* arrowed LINE */
+static void arrowedLine(InputOutputArray img, Point pt1, Point pt2, const Scalar& color, int thickness, int line_type, int shift, double tipLength) {
+    const double tipSize = norm(pt1-pt2)*tipLength; // Factor to normalize the size of the tip depending on the length of the arrow
+    line(img, pt1, pt2, color, thickness, line_type, shift);
+    const double angle = atan2( (double) pt1.y - pt2.y, (double) pt1.x - pt2.x );
+    Point p(cvRound(pt2.x + tipSize * cos(angle + CV_PI / 4)),
+    cvRound(pt2.y + tipSize * sin(angle + CV_PI / 4)));
+    line(img, p, pt2, color, thickness, line_type, shift);
+    p.x = cvRound(pt2.x + tipSize * cos(angle - CV_PI / 4));
+    p.y = cvRound(pt2.y + tipSize * sin(angle - CV_PI / 4));
+    line(img, p, pt2, color, thickness, line_type, shift);
+}
+
 
 /* Creates the optFlow map*/
-static void drawOptFlowMap(const Mat& flow, Mat& cflowmap, int step, double, const Scalar& color) {
+static void drawOptFlowMap(const Mat& flow, Mat& cflowmap, Mat& aux, int step, double, const Scalar& color) {
     for(int y = 0; y < cflowmap.rows; y += step) {
         for(int x = 0; x < cflowmap.cols; x += step) {
             const Point2f& fxy = flow.at<Point2f>(y, x);
-	    // next Line is KEY !
-            line(cflowmap, Point(x,y), Point(cvRound(x+fxy.x), cvRound(y+fxy.y)), Scalar(255,255,0));
+	    // next Line is KEY!
+            line(cflowmap, Point(x,y), Point(cvRound(x+fxy.x), cvRound(y+fxy.y)), Scalar(255,0,0));
             circle(cflowmap, Point(x,y), 2, color, -1);
+
+	    //if((fxy.x - x) > 3 || (fxy.y - y)> 3 ) {
+		//line(aux, Point(x,y), Point(cvRound(x+fxy.x), cvRound(y+fxy.y)), Scalar(255,0,0));
+		arrowedLine(aux, Point(x,y), Point(cvRound(x+fxy.x), cvRound(y+fxy.y)), Scalar(255,255,255));
+	    //}
         }
     }
 }
@@ -85,7 +103,7 @@ try {
 	dev->start();
 
 	// OpenCV frame definition.
-	cv::Mat img, gray, flow, frame, sflow, shsv;
+	cv::Mat img, gray, flow, frame, sflow, shsv, aux, sflowaux;
         // some faster than mat image container
  	UMat flowUmat, prevgray;
 
@@ -127,17 +145,19 @@ try {
     			// copy Umat container to standard Mat
     			flowUmat.copyTo(flow);
 
-			drawOptFlowMap(flow, sflow, 16, 1.5, Scalar(0, 255, 0));
+			sflow.copyTo(sflowaux);
+			aux = Mat::ones(flow.size(), CV_8U);
+			drawOptFlowMap(flow, sflow, aux, 15, 1.5, Scalar(0, 255, 0));
             		imshow("flow", sflow);
+			imshow("aux", aux);
+
 
 			drawHsvMap(flow, shsv);
 			imshow("hsv", shsv);
 
-			// TODO work with sflow --> blob motion vectors
+			// TODO K means (clustering)
 
-
-			// testing kmeans
-			// Mat labels, centers(2, 1, flow.type());
+			//Mat labels, centers(2, 1, sflow.type());
 			// double kmeans(InputArray data, int K, InputOutputArray bestLabels, TermCriteria criteria, int attempts, int flags, OutputArray centers=noArray() )
 			//kmeans(flow, 5, labels, TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 10, 1.0), 3, KMEANS_PP_CENTERS, centers);
 
@@ -145,8 +165,6 @@ try {
 			//  updateMotionHistory(silh, mhi, timestamp, MHI_DURATION);
 			//  calcMotionGradient(mhi, mask, orient, MAX_TIME_DELTA, MIN_TIME_DELTA, 3);
 			//  segmentMotion(mhi, segmask, regions, timestamp, MAX_TIME_DELTA);
-
-
 		} else {
 		         // update previus image
 	    		 gray.copyTo(prevgray); 
