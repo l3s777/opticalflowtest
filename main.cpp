@@ -112,7 +112,7 @@ try {
 	dev->start();
 
 	// OpenCV frame definition.
-	cv::Mat img, gray, flow, frame, sflow, shsv, aux;
+	cv::Mat img, gray, flow, sflow, shsv, aux;
         // some faster than mat image container
  	UMat prevgray;
 
@@ -155,30 +155,50 @@ try {
 
 			aux = Mat::ones(flow.size(), CV_8U);
 			drawOptFlowMap(flow, sflow, aux, 16, 1.5, Scalar(0, 255, 0));
-            		imshow("flow", sflow);
+            imshow("flow", sflow);
 			imshow("bw rows", aux);
 
 			//drawHsvMap(flow, shsv);
 			//imshow("hsv", shsv);
+	
 
-			// TODO K means (clustering)
-			Mat aux_;
-			sflow.copyTo(aux_);
-			aux_.convertTo(aux_, CV_32F); // convert to appropiate type
-
-			Mat centers, labels, res;
-			cv::kmeans(aux_, 3, labels, TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 10, 1.0), 3, KMEANS_PP_CENTERS, centers);
-
-			sflow.copyTo(res);
-			res = Scalar::all(0);
-
-			for(int i = 0; i < centers.rows; i++ ) {
-			    cout << "value point label: " << aux_.at<Point2f>(i) << endl;
-			    Point ipt = aux_.at<Point2f>(i);
-			    circle(res, ipt, 2, cv::Scalar(255, 0, 255), CV_FILLED, CV_AA );
+			// movingPoints vector
+			std::vector<cv::Point2f> movingPoints;
+			
+			for(int y = 0; y < flow.rows; y += 16) {
+				for(int x = 0; x < flow.cols; x += 16) {
+					const Point2f& f = flow.at<Point2f>(y, x);
+					// condition to take points in account
+					if(fabs(f.x)>8 && fabs(f.y)>8) movingPoints.push_back(cv::Point2f(x, y));
+				}
 			}
 
-			imshow("clusters", res);
+			int K = 2;
+			Mat centers, labels, res;
+			if(movingPoints.size() >= K) {
+				cv::Mat movingPointsMatrix(movingPoints, false); //second param for data copy (here, data are not duplicated!)
+
+				//cout << "movingPointsMatrix.size(): " << movingPointsMatrix.size() << endl << endl;
+				//cout << "movingPointsMatrix: " << movingPointsMatrix << endl << endl;
+
+				cv::kmeans(movingPointsMatrix, K, labels, TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 10, 1.0), 3, KMEANS_PP_CENTERS, centers);
+
+				int colors[K];
+				for (int i = 0; i < K; i++) {
+					colors[i] = 250.0 + (float) 250 / (i + 1);
+				}
+
+				Mat clustered = Mat(flow.rows, flow.cols, CV_32F); 
+
+				for (int i = 0; i < K; i++) {
+					Point2f center(centers.at<float>(i,0), centers.at<float>(i,1));
+					cout << "center: "<< center << endl;
+					circle(clustered, center, 2, Scalar(colors[i], 0, 0), -1);
+				}
+
+				clustered.convertTo(clustered, CV_8U);
+				imshow("Kmeans", clustered);
+			}
 
 			//  updateMotionHistory(silh, mhi, timestamp, MHI_DURATION);
 			//  calcMotionGradient(mhi, mask, orient, MAX_TIME_DELTA, MIN_TIME_DELTA, 3);
