@@ -30,17 +30,25 @@ static void arrowedLine(InputOutputArray img, Point pt1, Point pt2, const Scalar
 
 /* Creates the optFlow map*/
 static void drawOptFlowMap(const Mat& flow, Mat& cflowmap, Mat& aux, int step, double, const Scalar& color) {
+
     for(int y = 0; y < cflowmap.rows; y += step) {
         for(int x = 0; x < cflowmap.cols; x += step) {
             const Point2f& fxy = flow.at<Point2f>(y, x);
-	    // next Line is KEY!
+	    // Line is KEY!
             line(cflowmap, Point(x,y), Point(cvRound(x+fxy.x), cvRound(y+fxy.y)), Scalar(255,0,0));
             circle(cflowmap, Point(x,y), 2, color, -1);
 
-	    //if((fxy.x - x) > 3 || (fxy.y - y)> 3 ) {
+	    if( (fabs(fxy.x)>8) && fabs(fxy.x<15) && ( (fabs(fxy.y)>8 && fabs(fxy.y)<15) )) {		
 		//line(aux, Point(x,y), Point(cvRound(x+fxy.x), cvRound(y+fxy.y)), Scalar(255,0,0));
 		arrowedLine(aux, Point(x,y), Point(cvRound(x+fxy.x), cvRound(y+fxy.y)), Scalar(255,255,255));
-	    //}
+
+		cout << "You moved!" << endl;
+		if (fxy.x < 0) cout << "right!" << endl; 
+		else cout << "left!" << endl;
+		if (fxy.y < 0) cout << "up!" << endl; 
+		else cout << "down!" << endl;
+
+	    }
         }
     }
 }
@@ -76,6 +84,7 @@ static void drawHsvMap(const Mat& flow, Mat& sflowmap) {
 	bgr.copyTo(sflowmap);
 }
 
+
 /* Main */
 int main( int argc, char** argv )
 try {
@@ -103,9 +112,9 @@ try {
 	dev->start();
 
 	// OpenCV frame definition.
-	cv::Mat img, gray, flow, frame, sflow, shsv, aux, sflowaux;
+	cv::Mat img, gray, flow, frame, sflow, shsv, aux;
         // some faster than mat image container
- 	UMat flowUmat, prevgray;
+ 	UMat prevgray;
 
 	// capture first 50 frames to allow camera to stabilize
 	for (int i = 0; i < 50; ++i) dev->wait_for_frames();
@@ -126,42 +135,51 @@ try {
 		// RGB
 		const uint8_t * rgb_frame = reinterpret_cast<const uint8_t *>(rgb);
 		img = cv::Mat(480, 640, CV_8UC3, (void*) rgb_frame);
-		// TODO check conversions
-		//cv::Mat rgb_ = cv::Mat(480, 640, CV_8UC3, (void*) rgb_frame);
-		//cvtColor(rgb_, img, CV_BGR2RGB); // saving data into cv::mat container img
+		//cvtColor(img, img, CV_BGR2RGB); // saving data into cv::mat container img
 
 		// just make current frame gray
    		cvtColor(img, gray, COLOR_BGR2GRAY);
 
 		if (!prevgray.empty()) {
-			// applying FlowFareback
-			calcOpticalFlowFarneback(prevgray, gray, flowUmat, 0.5, 3, 15, 3, 5, 1.2, 0);
+
+			flow = Mat(gray.size(), CV_32FC2);
+			sflow = Mat(gray.size(), CV_8UC3);
 
 			// sflow to gray
 			cvtColor(prevgray, sflow, COLOR_GRAY2BGR);
-			// shsv to gray TODO check initial value in SHSV
+			// shsv to gray
 			cvtColor(prevgray, shsv, COLOR_GRAY2BGR);
 
-    			// copy Umat container to standard Mat
-    			flowUmat.copyTo(flow);
+			// applying FlowFarneback
+			calcOpticalFlowFarneback(prevgray, gray, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
 
-			sflow.copyTo(sflowaux);
 			aux = Mat::ones(flow.size(), CV_8U);
-			drawOptFlowMap(flow, sflow, aux, 15, 1.5, Scalar(0, 255, 0));
+			drawOptFlowMap(flow, sflow, aux, 16, 1.5, Scalar(0, 255, 0));
             		imshow("flow", sflow);
-			imshow("aux", aux);
+			imshow("bw rows", aux);
 
-
-			drawHsvMap(flow, shsv);
-			imshow("hsv", shsv);
+			//drawHsvMap(flow, shsv);
+			//imshow("hsv", shsv);
 
 			// TODO K means (clustering)
+			Mat aux_;
+			sflow.copyTo(aux_);
+			aux_.convertTo(aux_, CV_32F); // convert to appropiate type
 
-			//Mat labels, centers(2, 1, sflow.type());
-			// double kmeans(InputArray data, int K, InputOutputArray bestLabels, TermCriteria criteria, int attempts, int flags, OutputArray centers=noArray() )
-			//kmeans(flow, 5, labels, TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 10, 1.0), 3, KMEANS_PP_CENTERS, centers);
+			Mat centers, labels, res;
+			cv::kmeans(aux_, 3, labels, TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 10, 1.0), 3, KMEANS_PP_CENTERS, centers);
 
-			//  cv::kmeans(samples, ...
+			sflow.copyTo(res);
+			res = Scalar::all(0);
+
+			for(int i = 0; i < centers.rows; i++ ) {
+			    cout << "value point label: " << aux_.at<Point2f>(i) << endl;
+			    Point ipt = aux_.at<Point2f>(i);
+			    circle(res, ipt, 2, cv::Scalar(255, 0, 255), CV_FILLED, CV_AA );
+			}
+
+			imshow("clusters", res);
+
 			//  updateMotionHistory(silh, mhi, timestamp, MHI_DURATION);
 			//  calcMotionGradient(mhi, mask, orient, MAX_TIME_DELTA, MIN_TIME_DELTA, 3);
 			//  segmentMotion(mhi, segmask, regions, timestamp, MAX_TIME_DELTA);
