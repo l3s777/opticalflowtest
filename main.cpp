@@ -158,8 +158,8 @@ try {
             imshow("flow", sflow);
 			imshow("bw rows", aux);
 
-			//drawHsvMap(flow, shsv);
-			//imshow("hsv", shsv);
+			drawHsvMap(flow, shsv);
+			imshow("hsv", shsv);
 	
 
 			// movingPoints vector
