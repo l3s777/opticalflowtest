@@ -158,30 +158,26 @@ try {
             imshow("flow", sflow);
 			imshow("bw rows", aux);
 
-			drawHsvMap(flow, shsv);
-			imshow("hsv", shsv);
-	
-
 			// movingPoints vector
 			std::vector<cv::Point2f> movingPoints;
 			
 			for(int y = 0; y < flow.rows; y += 16) {
 				for(int x = 0; x < flow.cols; x += 16) {
 					const Point2f& f = flow.at<Point2f>(y, x);
-					// condition to take points in account
+					// condition to take points into account
 					if(fabs(f.x)>8 && fabs(f.y)>8) movingPoints.push_back(cv::Point2f(x, y));
 				}
 			}
 
-			int K = 2;
+			int K = 1;
 			Mat centers, labels, res;
 			if(movingPoints.size() >= K) {
-				cv::Mat movingPointsMatrix(movingPoints, false); //second param for data copy (here, data are not duplicated!)
+				cv::Mat movingPointsMatrix(movingPoints, false);
 
-				//cout << "movingPointsMatrix.size(): " << movingPointsMatrix.size() << endl << endl;
+				//cout << "movingPointsMatrix.size(): " << movingPointsMatrix.size() << endl;
 				//cout << "movingPointsMatrix: " << movingPointsMatrix << endl << endl;
 
-				cv::kmeans(movingPointsMatrix, K, labels, TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 10, 1.0), 3, KMEANS_PP_CENTERS, centers);
+				cv::kmeans(movingPointsMatrix, K, labels, TermCriteria( CV_TERMCRIT_EPS|CV_TERMCRIT_ITER, 10, 1.0), 3, KMEANS_PP_CENTERS, centers);
 
 				int colors[K];
 				for (int i = 0; i < K; i++) {
@@ -194,11 +190,21 @@ try {
 					Point2f center(centers.at<float>(i,0), centers.at<float>(i,1));
 					cout << "center: "<< center << endl;
 					circle(clustered, center, 2, Scalar(colors[i], 0, 0), -1);
+
+					// draw blobs en in the image
+					// cv::minEnclosingCircle(points, center, radius)
+					circle(clustered, center, 15, Scalar(0, 255, 255), 2);
+					
 				}
 
 				clustered.convertTo(clustered, CV_8U);
+
 				imshow("Kmeans", clustered);
 			}
+
+
+			//drawHsvMap(flow, shsv);
+			//imshow("hsv", shsv);
 
 			//  updateMotionHistory(silh, mhi, timestamp, MHI_DURATION);
 			//  calcMotionGradient(mhi, mask, orient, MAX_TIME_DELTA, MIN_TIME_DELTA, 3);
