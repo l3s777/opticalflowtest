@@ -30,11 +30,10 @@ static void arrowedLine(InputOutputArray img, Point pt1, Point pt2, const Scalar
 
 /* Creates the optFlow map*/
 static void drawOptFlowMap(const Mat& flow, Mat& cflowmap, Mat& aux, int step, double, const Scalar& color) {
-
     for(int y = 0; y < cflowmap.rows; y += step) {
         for(int x = 0; x < cflowmap.cols; x += step) {
             const Point2f& fxy = flow.at<Point2f>(y, x);
-	    // Line is KEY!
+	    // drawing the lines of motion
             line(cflowmap, Point(x,y), Point(cvRound(x+fxy.x), cvRound(y+fxy.y)), Scalar(255,0,0));
             circle(cflowmap, Point(x,y), 2, color, -1);
 
@@ -42,12 +41,10 @@ static void drawOptFlowMap(const Mat& flow, Mat& cflowmap, Mat& aux, int step, d
 		//line(aux, Point(x,y), Point(cvRound(x+fxy.x), cvRound(y+fxy.y)), Scalar(255,0,0));
 		arrowedLine(aux, Point(x,y), Point(cvRound(x+fxy.x), cvRound(y+fxy.y)), Scalar(255,255,255));
 
-		cout << "You moved!" << endl;
-		if (fxy.x < 0) cout << "right!" << endl; 
-		else cout << "left!" << endl;
-		if (fxy.y < 0) cout << "up!" << endl; 
-		else cout << "down!" << endl;
-
+		if (fxy.x < 0) cout << "You moved right!" << endl; 
+		else cout << "You moved left!" << endl;
+		if (fxy.y < 0) cout << "You moved up!" << endl; 
+		else cout << "You moved down!" << endl;
 	    }
         }
     }
@@ -76,7 +73,7 @@ static void drawHsvMap(const Mat& flow, Mat& sflowmap) {
 	_hsv[2] = magnitude;
 	merge(_hsv, 3, hsv);
 	// TODO check
-	blur(hsv, hsv, Size(5,5));
+	//blur(hsv, hsv, Size(5,5));
 
 	//convert to BGR and show
 	Mat bgr;//CV_32FC3 matrix
@@ -122,7 +119,6 @@ try {
 
 	// loop -- DATA ACQUISITION
 	while (1) {
-
 		// wait for new frame data
 		dev->wait_for_frames();
 
@@ -136,6 +132,20 @@ try {
 		const uint8_t * rgb_frame = reinterpret_cast<const uint8_t *>(rgb);
 		img = cv::Mat(480, 640, CV_8UC3, (void*) rgb_frame);
 		//cvtColor(img, img, CV_BGR2RGB); // saving data into cv::mat container img
+
+		// DEPTH
+		const uint8_t * depth_frame = reinterpret_cast<const uint8_t *>(depth);
+		cv::Mat depth16(480, 640, CV_16UC1, (void*) depth_frame);
+                cv::Mat depthM(depth16.size().height, depth16.size().width, CV_16UC1);
+                depth16.convertTo(depthM, CV_8UC3);
+		Mat depthmat;
+		// min/max distance from the camera
+		unsigned short min = 0.5, max = 3.5;
+		cv::Mat img0 = cv::Mat::zeros(depthM.size().height, depthM.size().width, CV_8UC1);
+		double scale_ = 255.0 / (max-min);
+		depthM.convertTo(img0, CV_8UC1, scale_);
+		cv::applyColorMap(img0, depthmat, cv::COLORMAP_JET); // saving depth data into depthmat
+
 
 		// just make current frame gray
    		cvtColor(img, gray, COLOR_BGR2GRAY);
@@ -153,14 +163,15 @@ try {
 			// applying FlowFarneback
 			calcOpticalFlowFarneback(prevgray, gray, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
 
+			// black/white matrix with motion vectors
 			aux = Mat::ones(flow.size(), CV_8U);
 			drawOptFlowMap(flow, sflow, aux, 16, 1.5, Scalar(0, 255, 0));
-            imshow("flow", sflow);
+            		imshow("flow", sflow);
 			imshow("bw rows", aux);
 
 			// movingPoints vector
 			std::vector<cv::Point2f> movingPoints;
-			
+
 			for(int y = 0; y < flow.rows; y += 16) {
 				for(int x = 0; x < flow.cols; x += 16) {
 					const Point2f& f = flow.at<Point2f>(y, x);
@@ -174,9 +185,7 @@ try {
 			if(movingPoints.size() >= K) {
 				cv::Mat movingPointsMatrix(movingPoints, false);
 
-				//cout << "movingPointsMatrix.size(): " << movingPointsMatrix.size() << endl;
-				//cout << "movingPointsMatrix: " << movingPointsMatrix << endl << endl;
-
+				// kmeans
 				cv::kmeans(movingPointsMatrix, K, labels, TermCriteria( CV_TERMCRIT_EPS|CV_TERMCRIT_ITER, 10, 1.0), 3, KMEANS_PP_CENTERS, centers);
 
 				int colors[K];
@@ -191,10 +200,19 @@ try {
 					cout << "center: "<< center << endl;
 					circle(clustered, center, 2, Scalar(colors[i], 0, 0), -1);
 
-					// draw blobs en in the image
-					// cv::minEnclosingCircle(points, center, radius)
+					// draw blob in the image
 					circle(clustered, center, 15, Scalar(0, 255, 255), 2);
+
+
+					// get distance from object to camera (depth)
+
+					// get motion velocity / acceleration
+
+					// print interesting values
 					
+
+					// values from flow matrix from "center" point
+					cout << "Point(" << flow.at<cv::Point2f>(center.x,center.y).x << "," << flow.at<cv::Point2f>(center.x,center.y).y << ")" << endl;
 				}
 
 				clustered.convertTo(clustered, CV_8U);
@@ -203,8 +221,9 @@ try {
 			}
 
 
-			//drawHsvMap(flow, shsv);
-			//imshow("hsv", shsv);
+			// showing HSV image
+			drawHsvMap(flow, shsv);
+			imshow("hsv", shsv);
 
 			//  updateMotionHistory(silh, mhi, timestamp, MHI_DURATION);
 			//  calcMotionGradient(mhi, mask, orient, MAX_TIME_DELTA, MIN_TIME_DELTA, 3);
